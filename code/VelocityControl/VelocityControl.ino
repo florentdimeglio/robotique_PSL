@@ -1,130 +1,112 @@
-/* Code to control the velocity of both motors using a PI controller  
+/* Test code for implementing a PI controller on the velocity measured by the encoders
+
+  Note: this code requires the following libraries (install them through the library manager):
+     - SparkFun I2C Mux Arduino Library
+     - AS5600 library
+     - MecatroUtils library (install *.zip file)
+
+  TO FILL:
+      - PI controller parameters Kp and Ki
+      - reference values for the rotational velocities wR and wL
+      - set the right multiplexer ports for the encoders in both the controlLoop() and setup() functions
 */
 
 // Include the current library
 #include "MecatroUtils.h"
 
-
-// Include the AS5600 library (for the encoders) and Sparkfun I2C Mux (for muliplexer)
+// Include the AS5600 library (for the encoders) and Sparkfun I2C Mux (for multiplexer)
 #include "AS5600.h"
 #include "SparkFun_I2C_Mux_Arduino_Library.h"
 
 // Header for I2C communication
 #include "Wire.h"
 
-QWIICMUX muliplexer;
-AS5600 rightEncoder, leftEncoder;
-
 // Define the control loop period, in ms.
 #define CONTROL_LOOP_PERIOD 5
+#define BAUD_RATE 1000000
+//Controller parameters ** MUST FILL IN WITH YOUR PARAMETERS
+float Kp = 0;
+float Ki = 0;
 
-// Create a PID object
-class PID{
-  public:
-    PID(float const& Kp, float const& Ki, float const& antiWindup) :
-      Kp_(Kp),
-      Ki_(Ki),
-      antiWindup_(antiWindup),
-    { 
-      // Empty on purpose
-    }
-    
-    // Compute next PID command based on current state and target
-    float compute(float position, float velocity, float targetPosition, float targetVelocity, float dt)
-    {
-      // The integral is simply the position, while the velocity is handled by the proportional term..
-      float integral = (position - targetPosition);
-      if (integral > antiWindup_)
-        integral = antiWindup_;
-      if (integral < -antiWindup_)
-        integral = -antiWindup_;
-      
-      return - Kp_ * (velocity - targetVelocity) - Ki_ * integral;
-    }
+// Initialise the integrators
+float IR = 0;
+float IL = 0;
+int time = 0;
+float dt;
+float uR, uL;
+QWIICMUX multiplexer;
+AS5600 rightEncoder, leftEncoder;
 
-  private:
-    float Kp_;
-    float Kd_;
-    float Ki_;
-    float antiWindup_;
-};
-
-PID rightPID(0.02, 0.15, 1.0);
-
-PID leftPID(0.02, 0.15, 1.0);
-
-// Target signal: sinusoids
-float const A = 1.0;  // rad/s
-float const f = 1.0;  // Hz
-float const w = 2 * PI * f;
-
+// This function is called periodically, every CONTROL_LOOP_PERIOD ms.
+// Put all your code here.
 void mecatro::controlLoop()
 {
-  // Right motor
-  float const targetPosition = A * (cos(w * time) - 1);
-  float const targetVelocity = -A * w * sin(w * time);
-
-  muliplexer.setPort(0);
-  float position = rightEncoder.getCumulativePosition() * AS5600_RAW_TO_RADIANS;
-  float velocity = rightEncoder.getAngularSpeed(AS5600_MODE_RADIANS);
-
-  // Empyrically determined feedforard.
-  float const feedforward =  0.165 / 2 / 3.14159 * targetVelocity;
-  float const rightCommand = rightPID.compute(position, velocity, targetPosition, targetVelocity) + feedforward;
-
-  // Log
-  mecatro::log("rightPosition", position);
-  mecatro::log("rightVelocity", velocity);
-  mecatro::log("rightPositionTarget",  targetPosition);
-  mecatro::log("rightVelocityTarget",  targetVelocity);
-  mecatro::log("rightCommand",  rightCommand);
-
+  dt = (millis() - time) * 1e-3;
+  time = millis();
   
-  muliplexer.setPort(2);
-  position = leftEncoder.getCumulativePosition() * AS5600_RAW_TO_RADIANS;
-  velocity = leftEncoder.getAngularSpeed(AS5600_MODE_RADIANS);
+  // Set multiplexer to use port 7 to talk to right encoder. ** MUST SET THE RIGHT MULTIPLEXER PORT **
+  multiplexer.setPort(7);
+  // Raw encoder measurement - from 0 to 360 degrees
+  float wR = rightEncoder.getAngularSpeed(AS5600_MODE_RADIANS);
 
-  float const leftCommand = leftPID.compute(position, velocity, targetPosition, targetVelocity);
+  // Set multiplexer to use port 4 to talk to left encoder. ** MUST SET THE RIGHT MULTIPLEXER PORT **
+   multiplexer.setPort(4);
+  // Raw encoder measurement - from 0 to 360 degrees
+  float wL = leftEncoder.getAngularSpeed(AS5600_MODE_RADIANS);
+  
+  //Reference value for angular velocities (rad/s)
+  float wRref = 0;
+  float wLref = 0;
 
-  // Log
-  //mecatro::log("leftPosition", position);
-  //mecatro::log("leftVelocity", velocity);
-  //mecatro::log("leftPositionTarget",  targetPosition);
-  //mecatro::log("leftVelocityTarget",  targetVelocity);
+  //Error variables
+  float eR = (wR - wRref);
+  float eL = (wL - wLref);
+  //Update integrators
+  IR += dt * eR;
+  IL += dt * eL;
+  //Control inputs
+  uR = - Kp * eR - Ki * IR;
+  uL = - Kp * eL - Ki * IL;
 
-  // Make the right motor spin
-  mecatro::setMotorDutyCycle(-rightCommand, leftCommand);
+  // Keep the motor off, i.e. at 0 duty cycle (1 is full forward, -1 full reverse)
+  mecatro::setMotorDutyCycle(uL, uR);
+
+  mecatro::log("wR",wR);
+
+  // Serial.print("Right speed ");
+  // Serial.println(wR);
+//  Serial.print("Left speed ");
+//  Serial.print(wL)
 }
 
 
 void setup()
 {
   // Setup serial communication with the PC - for debugging and logging.
-  Serial.begin(1000000);
-
+  Serial.begin(BAUD_RATE);
   // Start I2C communication
   Wire.begin();
   // Set I2C clock speed to 400kHz (fast mode)
   Wire.setClock(400000);
 
-  // Init muliplexer
-  if (!muliplexer.begin())
+  // Init multiplexer
+  if (!multiplexer.begin())
   {
-    Serial.println("Error: I2C muliplexer not found. Check wiring.");
+    Serial.println("Error: I2C multiplexer not found. Check wiring.");
   }
   else
   {
     bool isInit = true;
-    // Set muliplexer to use port 0 to talk to right encoder.
-    muliplexer.setPort(0);
+    // Set multiplexer to use port 0 to talk to right encoder. ** MUST SET THE RIGHT MULTIPLEXER PORT **
+    multiplexer.setPort(7);
     rightEncoder.begin();
     if (!rightEncoder.isConnected())
     {
       Serial.println("Error: could not connect to right encoder. Check wiring.");
       isInit = false;
     }
-    // Set muliplexer to use port 3 to talk to left encoder.
-    muliplexer.setPort(2);
+    // Set multiplexer to use port 3 to talk to left encoder. ** MUST SET THE RIGHT MULTIPLEXER PORT **
+    multiplexer.setPort(4);
     leftEncoder.begin();
     if (!leftEncoder.isConnected())
     {

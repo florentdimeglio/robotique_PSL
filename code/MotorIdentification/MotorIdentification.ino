@@ -1,5 +1,4 @@
-/* Identification of the motor response: velocity versus input duty cycle
-  
+/* Identification of the motor response: velocity versus input duty cycle with a sawtooth input signal
 */
 
 // Include the current library
@@ -32,10 +31,9 @@ void mecatro::controlLoop()
   
   double target;
   if (time < QUATER_PERIOD)
-    //target = time / QUATER_PERIOD;
-    target = 1.;
+    target = time / QUATER_PERIOD;
   else if (time < 3 * QUATER_PERIOD)
-    //target = 1 - (time - QUATER_PERIOD) / QUATER_PERIOD;
+    target = 1 - (time - QUATER_PERIOD) / QUATER_PERIOD;
     target = -1.;
   else
     target = -1 + (time - 3 * QUATER_PERIOD) / QUATER_PERIOD;
