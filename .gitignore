@@ -1,0 +1,5 @@
+mecatro_venv
+*DXF
+
+__pycache__/
+*.egg-info/
