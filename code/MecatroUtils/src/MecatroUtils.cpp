@@ -111,7 +111,7 @@ namespace mecatro{
         sei();
     }
 
-    void setMotorDutyCycle(float const& rightMotorDC, float const& leftMotorDC)
+    void setMotorDutyCycle(float const& leftMotorDC, float const& rightMotorDC)
     {
         // Set direction
         digitalWrite(DIRECTION_MOTOR_RIGHT, rightMotorDC > 0);

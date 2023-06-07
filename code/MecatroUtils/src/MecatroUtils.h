@@ -30,7 +30,7 @@ namespace mecatro{
     ///          forward, 0 is power off.
     /// @param[in] rightMotorDC Duty cycle for right motor, between -1 (full reverse) and 1 (full foward).
     /// @param[in] leftMotorDC Duty cycle for left motor, between -1 (full reverse) and 1 (full foward).
-    void setMotorDutyCycle(float const& rightMotorDC, float const& leftMotorDC);
+    void setMotorDutyCycle(float const& leftMotorDC, float const& rightMotorDC);
 
     /// @brief Log a variable for post-processing.
     /// @details The maximum length for a variable name is 6 characters, exceeding values will be cropped.
